@@ -1,0 +1,87 @@
+# Phase 0 local dev loop. Four services:
+#   db    - Postgres + pgvector (recipe store + vector search)
+#   tei   - text-embeddings-inference, bge-small-en-v1.5 (384-dim, CPU)
+#   llama - llama.cpp server, OpenAI-compatible, serves the local GGUF model
+#   api   - FastAPI planner-api (RAG + LLM), the thing we curl
+#
+# Same service topology we'll later split into Helm charts (Phase 1).
+
+name: hungry
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hungry}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hungry}
+      POSTGRES_DB: ${POSTGRES_DB:-hungry}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hungry} -d ${POSTGRES_DB:-hungry}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  tei:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.8
+    command: ["--model-id", "BAAI/bge-small-en-v1.5"]
+    ports:
+      - "8081:80"
+    volumes:
+      - tei-cache:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:80/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  llama:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    command: >
+      -m /models/${LLM_MODEL_FILE:-qwen2.5-3b-instruct-q4_k_m.gguf}
+      -c 4096
+      --host 0.0.0.0
+      --port 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/models:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  api:
+    build: ./planner-api
+    depends_on:
+      db:
+        condition: service_healthy
+      tei:
+        condition: service_healthy
+      llama:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-hungry}:${POSTGRES_PASSWORD:-hungry}@db:5432/${POSTGRES_DB:-hungry}
+      TEI_URL: http://tei:80
+      # --- LLM backend switch (the core config knob) ---
+      LLM_BACKEND: ${LLM_BACKEND:-llama}
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://llama:8000/v1}
+      LLM_MODEL: ${LLM_MODEL:-qwen2.5-3b-instruct}
+      LLM_API_KEY: ${LLM_API_KEY:-sk-noauth}
+      # hosted fallback (used when LLM_BACKEND=hosted)
+      HOSTED_BASE_URL: ${HOSTED_BASE_URL:-}
+      HOSTED_MODEL: ${HOSTED_MODEL:-}
+      HOSTED_API_KEY: ${HOSTED_API_KEY:-}
+    volumes:
+      - ./data:/data:ro
+    ports:
+      - "8088:8000"
+
+volumes:
+  pgdata:
+  tei-cache:

@@ -1,2 +1,14 @@
 kubeconfig
 *.conf
+
+# secrets / local env
+.env
+
+# large artifacts (downloaded, not committed)
+models/
+data/
+
+# python
+__pycache__/
+*.pyc
+.venv/
