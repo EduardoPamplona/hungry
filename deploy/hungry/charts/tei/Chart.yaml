@@ -1,0 +1,5 @@
+apiVersion: v2
+name: tei
+description: Text-embeddings-inference (bge-small-en-v1.5) on CPU.
+type: application
+version: 0.1.0

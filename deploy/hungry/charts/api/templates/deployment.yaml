@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-api
+  labels: { app: {{ .Release.Name }}-api }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: {{ .Release.Name }}-api }
+  template:
+    metadata:
+      labels: { app: {{ .Release.Name }}-api }
+    spec:
+      {{- with .Values.global.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ . }}
+      {{- end }}
+      containers:
+        - name: api
+          image: "{{ .Values.image }}:{{ .Values.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: 8000
+          env:
+            {{- include "hungry.api.env" . | nindent 12 }}
+          readinessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits:   { memory: "512Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-api
+  {{- if eq .Values.service.type "LoadBalancer" }}
+  annotations:
+    # Network Load Balancer (L4), cheaper/simpler than an ALB for a single service.
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  selector: { app: {{ .Release.Name }}-api }
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: 8000

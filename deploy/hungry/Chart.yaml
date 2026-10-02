@@ -1,0 +1,20 @@
+apiVersion: v2
+name: hungry
+description: Hungry meal-planner — umbrella chart deploying the Phase 1 backend stack onto homelab k8s.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+# Each service is a subchart under charts/. `condition` lets you toggle any of
+# them from the parent values.yaml (e.g. api.enabled=false) without deleting it.
+dependencies:
+  - name: db
+    version: 0.1.0
+    condition: db.enabled
+  - name: tei
+    version: 0.1.0
+    condition: tei.enabled
+  # llama removed post-pivot (hosted LLM). Re-add its subchart in the GPU phase.
+  - name: api
+    version: 0.1.0
+    condition: api.enabled

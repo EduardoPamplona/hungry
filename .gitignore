@@ -12,3 +12,13 @@ data/
 __pycache__/
 *.pyc
 .venv/
+
+# terraform (keep .terraform.lock.hcl — it pins provider versions)
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log
+
+# local agent/tooling config
+.claude/

@@ -1,7 +1,12 @@
 # hungry
 
 Small AI meal-planning app used as a vehicle to build, deploy, scale, observe and
-benchmark real infra. See [`project_plan.md`](./project_plan.md) for the full phase plan.
+benchmark real cloud infra on AWS. See [`project_plan.md`](./project_plan.md) for the phase
+plan and [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the design and concepts.
+
+A **stateless RAG API** on EKS: embed the goal → vector-search recipes in Postgres+pgvector →
+prompt an LLM (backend chosen by config) → return a validated JSON meal plan. Postgres (via the
+CloudNativePG operator), TEI embeddings and the LLM are each a separate, swappable service.
 
 ## Phase 0 — local dev loop
 
@@ -54,3 +59,52 @@ Set in `.env`, then `docker compose up -d api`:
 | llama.cpp | 8000 |
 | TEI | 8081 |
 | Postgres | 5432 |
+
+## Phase 1 — AWS EKS
+
+Runs the same app on **AWS EKS**, provisioned by Terraform and deployed with Helm. The cluster is
+**ephemeral**: bring it up per session, `terraform destroy` after. The LLM backend is a hosted
+OpenAI-compatible API (`LLM_BACKEND=hosted`); self-hosted vLLM on GPU comes in a later phase.
+
+```
+deploy/
+├── terraform/          # VPC + EKS + EBS CSI (IRSA) + gp3 StorageClass
+├── images/             # cnpg-pgvector (Postgres+pgvector for CloudNativePG)
+└── hungry/             # Helm umbrella chart: db (CNPG), tei, api (+ ingest Job)
+```
+
+### Prereqs
+- `terraform`, `aws` CLI, `helm`, `kubectl`
+- AWS credentials (`aws configure`) with rights for VPC/EKS/EC2/IAM
+- A ghcr.io PAT (`write:packages`) to push images
+- The Food.com `RAW_recipes.csv` reachable at a URL for the ingest Job
+- A hosted LLM API key
+
+### Bring-up (outline)
+
+```bash
+# 1. images -> ghcr.io
+docker build -t ghcr.io/<you>/planner-api:latest ./planner-api && docker push ghcr.io/<you>/planner-api:latest
+docker build -t ghcr.io/<you>/cnpg-pgvector:17 ./deploy/images/cnpg-pgvector && docker push ghcr.io/<you>/cnpg-pgvector:17
+
+# 2. infra (~15 min)
+cd deploy/terraform && terraform init && terraform apply
+aws eks update-kubeconfig --name hungry --region us-east-1
+
+# 3. secrets
+kubectl create ns hungry
+kubectl -n hungry create secret generic hungry-llm --from-literal=HOSTED_API_KEY=<key>
+
+# 4. deploy (CNPG Cluster + TEI + api; ingest Job runs via Helm hook)
+helm install hungry ./deploy/hungry -n hungry \
+  --set api.ingest.dataUrl=<csv-url>
+
+# 5. smoke test (NLB hostname)
+kubectl -n hungry get svc hungry-api
+curl -s <nlb-hostname>/health | jq
+
+# 6. teardown at session end
+cd deploy/terraform && terraform destroy
+```
+
+See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for what each piece is and why.

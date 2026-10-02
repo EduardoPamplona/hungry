@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-tei
+  labels: { app: {{ .Release.Name }}-tei }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: {{ .Release.Name }}-tei }
+  template:
+    metadata:
+      labels: { app: {{ .Release.Name }}-tei }
+    spec:
+      containers:
+        - name: tei
+          image: {{ .Values.image }}
+          args: ["--model-id", {{ .Values.modelId | quote }}]
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: cache
+              mountPath: /data
+          readinessProbe:
+            httpGet: { path: /health, port: 80 }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 30   # first run downloads the model
+          resources:
+            requests: { cpu: "500m", memory: "1Gi" }
+            limits:   { memory: "2Gi" }
+      volumes:
+        - name: cache
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-tei-cache
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-tei
+spec:
+  selector: { app: {{ .Release.Name }}-tei }
+  ports:
+    - port: 80
+      targetPort: 80
