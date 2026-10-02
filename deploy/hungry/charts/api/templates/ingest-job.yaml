@@ -1,0 +1,41 @@
+{{- if .Values.ingest.enabled }}
+# Re-runnable ingestion. Helm hooks make every `helm upgrade` re-run it, and
+# `before-hook-creation` deletes the previous Job first (Jobs are immutable).
+# Data source: an initContainer downloads the CSV from .Values.ingest.dataUrl
+# (public URL or an S3 presigned URL) — the Food.com CSV isn't in the image.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-ingest
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      {{- with .Values.global.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ . }}
+      {{- end }}
+      initContainers:
+        - name: fetch-data
+          image: curlimages/curl:8.11.1
+          args: ["-fsSL", "-o", "/data/RAW_recipes.csv", {{ .Values.ingest.dataUrl | quote }}]
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      containers:
+        - name: ingest
+          image: "{{ .Values.image }}:{{ .Values.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command: ["python", "-m", "app.ingest", "/data/RAW_recipes.csv", {{ .Values.ingest.limit | quote }}]
+          env:
+            {{- include "hungry.api.env" . | nindent 12 }}
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      volumes:
+        - name: data
+          emptyDir: {}
+{{- end }}

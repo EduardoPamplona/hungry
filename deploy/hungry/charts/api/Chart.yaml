@@ -1,0 +1,5 @@
+apiVersion: v2
+name: api
+description: FastAPI planner-api (RAG + hosted LLM) + re-runnable ingest Job.
+type: application
+version: 0.1.0

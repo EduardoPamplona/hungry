@@ -1,0 +1,57 @@
+# Parent values. Each top-level key matching a subchart name feeds that subchart.
+# `global` is visible to every subchart at .Values.global.
+
+global:
+  # ghcr namespace for images we build (planner-api, cnpg-pgvector).
+  # CONFIRM this matches your lowercased GitHub username / org.
+  registry: ghcr.io/eduardopamplona
+  imagePullPolicy: IfNotPresent
+  imagePullSecret: ghcr-pull
+  # EBS-backed StorageClass created by the EKS EBS CSI addon (Terraform).
+  # (was local-path on the retired homelab.)
+  storageClass: gp3
+
+# ---------------------------------------------------------------------------
+db:
+  enabled: true
+  image: ghcr.io/eduardopamplona/cnpg-pgvector:17
+  instances: 1            # single instance — ephemeral cluster, re-ingested per session
+  storage: 5Gi
+  database: hungry
+  owner: hungry
+
+tei:
+  enabled: true
+  image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.8
+  modelId: BAAI/bge-small-en-v1.5
+  cacheSize: 2Gi
+
+# llama.cpp is OFF post-pivot — LLM is served by a hosted API for now.
+# Kept in the chart so re-enabling it (GPU phase) is a one-line flip.
+llama:
+  enabled: false
+  image: ghcr.io/ggml-org/llama.cpp:server
+  modelFile: qwen2.5-3b-instruct-q4_k_m.gguf
+  contextSize: 4096
+  modelStorage: 4Gi
+
+api:
+  enabled: true
+  image: ghcr.io/eduardopamplona/planner-api
+  tag: latest
+  # LLM backend switch. Post-pivot default: hosted.
+  llmBackend: hosted     # llama | hosted
+  # Hosted endpoint config. The API KEY is NOT here — it comes from a Secret
+  # named `hungry-llm` (key: HOSTED_API_KEY), created out-of-band / by Terraform.
+  hostedBaseUrl: https://api.anthropic.com/v1
+  hostedModel: claude-haiku-4-5-20251001
+  hostedSecret: hungry-llm
+  service:
+    type: LoadBalancer   # EKS provisions an NLB; reach /plan at its external hostname
+    port: 80
+  # Re-runnable ingestion Job (Helm hook). Set dataUrl before enabling — the
+  # Food.com CSV must be reachable (public URL or S3 presigned).
+  ingest:
+    enabled: true
+    dataUrl: ""          # REQUIRED: https/S3 URL to RAW_recipes.csv
+    limit: 2000

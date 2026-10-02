@@ -1,0 +1,38 @@
+# A CloudNativePG Cluster. The operator reconciles this one object into a
+# StatefulSet, a PVC (via the default local-path StorageClass), primary/replica
+# Services, and a Secret named "<name>-app" holding the app-user credentials
+# (keys: username, password, dbname, host, port, uri, ...). The api subchart
+# reads DATABASE_URL from that secret's "uri" key.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ .Release.Name }}-db
+spec:
+  instances: {{ .Values.instances }}
+  imageName: {{ .Values.image }}
+
+  storage:
+    size: {{ .Values.storage }}
+    storageClass: {{ .Values.global.storageClass }}
+
+  bootstrap:
+    initdb:
+      database: {{ .Values.database }}
+      owner: {{ .Values.owner }}
+      # postInitApplicationSQL runs as superuser in the freshly-created app db,
+      # so CREATE EXTENSION (vector is untrusted, needs superuser) works here.
+      # No ivfflat index — it is built by the ingest Job once rows exist, or its
+      # centroids train on an empty table and queries return nothing.
+      postInitApplicationSQL:
+        - CREATE EXTENSION IF NOT EXISTS vector;
+        - |
+          CREATE TABLE IF NOT EXISTS recipes (
+              id          BIGINT PRIMARY KEY,
+              name        TEXT NOT NULL,
+              minutes     INT,
+              tags        TEXT,
+              ingredients TEXT,
+              steps       TEXT,
+              n_steps     INT,
+              embedding   vector(384)
+          );
