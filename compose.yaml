@@ -1,10 +1,8 @@
-# Phase 0 local dev loop. Four services:
+# Local stack for the AI pipeline. Four services:
 #   db    - Postgres + pgvector (recipe store + vector search)
 #   tei   - text-embeddings-inference, bge-small-en-v1.5 (384-dim, CPU)
 #   llama - llama.cpp server, OpenAI-compatible, serves the local GGUF model
 #   api   - FastAPI planner-api (RAG + LLM), the thing we curl
-#
-# Same service topology we'll later split into Helm charts (Phase 1).
 
 name: hungry
 

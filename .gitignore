@@ -1,6 +1,3 @@
-kubeconfig
-*.conf
-
 # secrets / local env
 .env
 

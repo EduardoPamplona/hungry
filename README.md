@@ -1,14 +1,21 @@
 # hungry
 
-Small AI meal-planning app used as a vehicle to build, deploy, scale, observe and
-benchmark real infra. See [`project_plan.md`](./project_plan.md) for the full phase plan.
+A meal-planning app built to learn applied LLM engineering: retrieval-augmented generation
+over recipes, grounded and validated structured output, evals, and comparing LLM backends.
+See [`project_plan.md`](./project_plan.md) for the roadmap.
 
-## Phase 0 — local dev loop
+## Layout
 
-Runs the whole app on your machine via Docker Compose: Postgres+pgvector, a TEI
-embedding server, a llama.cpp LLM server, and the FastAPI `planner-api`. The LLM
-backend is a config switch (`LLM_BACKEND=llama|hosted`) so the same client can later
-point at cloud vLLM or a hosted API.
+- `planner-api/app/` — FastAPI service
+  - `rag.py` — vector retrieval over recipes
+  - `llm.py` — prompt construction and the LLM client (backend-agnostic)
+  - `schema.py` — request and plan models
+  - `ingest.py` — load recipes, embed them, write to pgvector
+- `sql/init.sql` — recipe table and pgvector extension
+- `scripts/` — download the local model and the dataset
+- `compose.yaml` — local Postgres, embedding server, LLM server and API
+
+## Local setup
 
 ### Prereqs
 - Docker Engine + compose v2 (`docker.io` + `docker-compose-v2` on Ubuntu)
