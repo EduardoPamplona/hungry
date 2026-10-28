@@ -9,3 +9,6 @@ data/
 __pycache__/
 *.pyc
 .venv/
+
+# local agent/tooling config
+.claude/
